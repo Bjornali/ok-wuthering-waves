@@ -38,7 +38,7 @@ class BigMap(WWOneTimeTask, BaseCombatTask):
         self.stars = self.find_feature('big_map_star', threshold=0.7, frame=self.big_map_frame,
                                        box=Box(0, 0, self.big_map_frame.shape[1], self.big_map_frame.shape[0]))
         all_star_len = len(self.stars)
-        self.stars = sort_stars(self.stars, self.diamond, self.height_of_screen(0.2))
+        self.stars = sort_stars(self.stars, self.diamond, self.star_max_hop_distance)
         self.stars.insert(0, self.diamond)
         mini_map_box = self.get_box_by_name('box_minimap')
         self.my_box = self.diamond.scale(mini_map_box.width / self.diamond.width * 2)
@@ -56,6 +56,11 @@ class BigMap(WWOneTimeTask, BaseCombatTask):
         self.info_set('Stars', len(self.stars))
         if wait_world:
             self.wait_in_team_and_world()
+
+    @property
+    def star_max_hop_distance(self):
+        """Stars further than this from the previous star in the path are dropped."""
+        return self.height_of_screen(0.2)
 
     def find_closest(self, my_box):
         min_distance = 100000
@@ -155,10 +160,16 @@ class FarmMapTask(BigMap):
         self.stuck_index = 0
         self.last_distance = 0
         self._has_health_bar = False
+        # Subclasses set this to stop and run on_star_reached() at every star after the start diamond.
+        self.act_at_stars = False
 
     @property
     def star_move_distance_threshold(self):
         return self.height_of_screen(0.03)
+
+    def on_star_reached(self, star):
+        """Called with movement stopped when a star is reached, if act_at_stars is True."""
+        pass
 
     def run(self):
         self.stuck_index = 0
@@ -207,6 +218,11 @@ class FarmMapTask(BigMap):
                 if distance <= self.star_move_distance_threshold:
                     self.log_info(f'reached star {star} {distance} {self.star_move_distance_threshold}')
                     self.remove_star(star)
+                    if self.act_at_stars and star is not self.diamond:
+                        self._stop_movement(current_direction)
+                        current_direction = None
+                        self.on_star_reached(star)
+                        self.last_distance = 0
                     continue
                 elif distance >= self.height_of_screen(0.4):
                     too_far_count += 1
