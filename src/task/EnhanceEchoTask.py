@@ -8,11 +8,33 @@ from ok.feature.Box import get_bounding_box
 from ok.util.file import clear_folder
 from src.scene.WWScene import WWScene
 from src.task.BaseWWTask import BaseWWTask
+from src.task.echo_text_en import parse_rows
 
 logger = Logger.get_logger(__name__)
 
 number_pattern = re.compile(r"^[\d.%％ ]+$")
 property_pattern = re.compile(r"[\u4e00-\u9fff]{2,}")
+
+# On-screen text per game language. English strings were read off the 3.7 English client.
+UI_TEXT = {
+    'zh': {
+        'enhance': '培养',
+        'echo_skill': re.compile('声骸技能'),
+        'add_mat': ['阶段放入'],
+        'enhance_tune': ['强化并调谐'],
+        'enhance_only': ['强化'],
+        'dialog': [re.compile('不再提示'), '调谐成功', re.compile('点击任')],
+    },
+    'en': {
+        'enhance': 'Upgrade',
+        'echo_skill': re.compile(r'Echo\s*Skill', re.I),
+        'add_mat': ['Add by Step', re.compile(r'^Add\s*by\s*Step', re.I)],
+        'enhance_tune': [re.compile(r'Upgrade\s*&\s*Tune', re.I)],
+        'enhance_only': ['Upgrade'],
+        'dialog': [re.compile(r"don.?t\s*show", re.I), re.compile(r'Tuning\s*Successful', re.I),
+                   re.compile(r'Tap\s*anywhere', re.I)],
+    },
+}
 
 
 class EnhanceEchoTask(BaseWWTask, FindFeature):
@@ -50,11 +72,28 @@ class EnhanceEchoTask(BaseWWTask, FindFeature):
             'Pause after Success': 'When a success occurs, send notification and pause task',
         }
 
+    def ui(self, key):
+        return UI_TEXT['en' if self.game_lang == 'en_US' else 'zh'][key]
+
+    def dialog_action(self, name):
+        """'dont_show', 'close' or None for a text found on the post-tuning dialogs."""
+        if self.game_lang == 'en_US':
+            if re.search(r"don.?t\s*show", name, re.I):
+                return 'dont_show'
+            if re.search(r'Tuning\s*Successful|Tap\s*anywhere', name, re.I):
+                return 'close'
+            return None
+        if name in ['本次登录不再提示', '本次登入不再提示']:
+            return 'dont_show'
+        if name in ['点击任意位置返回', '调谐成功']:
+            return 'close'
+        return None
+
     def find_echo_enhance(self):
-        return self.ocr(0.82, 0.86, 0.97, 0.96, match='培养')
+        return self.ocr(0.82, 0.86, 0.97, 0.96, match=self.ui('enhance'))
 
     def is_0_level(self):
-        return self.ocr(0.65, 0.35, 1, 0.57, match=re.compile('声骸技能'))
+        return self.ocr(0.65, 0.35, 1, 0.57, match=self.ui('echo_skill'))
 
     def select_0_level_echo(self):
         # 3.7 起从培养界面返回后, 背包选中并滚动到刚强化的声骸, 不再停在第一格
@@ -107,33 +146,29 @@ class EnhanceEchoTask(BaseWWTask, FindFeature):
                         if have_add_mat:
                             break
                 if not have_add_mat:
-                    raise Exception('强化设置需要开启阶段放入!')
+                    raise Exception('强化设置需要开启阶段放入! (Add by Step not found)')
 
-                if not self.wait_click_ocr(0.1, 0.88, 0.29, 0.96, match=['强化并调谐'],
+                if not self.wait_click_ocr(0.1, 0.88, 0.29, 0.96, match=self.ui('enhance_tune'),
                                            settle_time=0.1,
                                            after_sleep=1.5):
-                    if self.ocr(0.17, 0.88, 0.29, 0.96, match=['强化']):
-                        raise Exception('强化设置需要开启同步调谐!')
+                    if self.ocr(0.17, 0.88, 0.29, 0.96, match=self.ui('enhance_only')):
+                        raise Exception('强化设置需要开启同步调谐! (Upgrade settings: turn on tuning with upgrade)')
                     else:
-                        raise Exception('找不到 强化并调谐!')
+                        raise Exception('找不到 强化并调谐! (Upgrade & Tune button not found)')
                 while handle := self.wait_ocr(0.24, 0.18, 0.75, 0.98,
-                                              match=[re.compile('不再提示'), '调谐成功', re.compile('点击任')],
+                                              match=self.ui('dialog'),
                                               time_out=2):
-                    if handle[0].name in ['本次登录不再提示', '本次登入不再提示']:
+                    action = self.dialog_action(handle[0].name)
+                    if action == 'dont_show':
                         self.click_skip_dialog_confirm()
-                    elif handle[0].name in ['点击任意位置返回', '调谐成功']:
+                    elif action == 'close':
                         self.click(handle, after_sleep=1)
                     else:
                         self.sleep(0.5)
                 self.sleep(0.1)
                 texts = self.ocr(0.09, 0.3, 0.40, 0.53)
                 self.log_info(f'ocr values: {texts}')
-                properties = [p for p in self.find_boxes(texts, match=property_pattern) if '辅音' not in p.name]
-                for p in properties:
-                    match = property_pattern.search(p.name)
-                    if match:
-                        p.name = match.group()
-                values = self.find_boxes(texts, match=number_pattern)
+                properties, values = self.parse_substat_texts(texts)
                 self.info_set('属性', properties)
                 self.info_set('值', values)
 
@@ -144,6 +179,19 @@ class EnhanceEchoTask(BaseWWTask, FindFeature):
                 if len(properties) >= 5:
                     self.lock_and_esc()
                     break
+
+    def parse_substat_texts(self, texts):
+        """Split the OCR'd substat panel into property boxes (canonical Chinese names) and value boxes."""
+        if self.game_lang == 'en_US':
+            rows = parse_rows(texts, row_tolerance=self.height_of_screen(0.015))
+            return [name for name, _, _ in rows], [value for _, value, _ in rows]
+        properties = [p for p in self.find_boxes(texts, match=property_pattern) if '辅音' not in p.name]
+        for p in properties:
+            match = property_pattern.search(p.name)
+            if match:
+                p.name = match.group()
+        values = self.find_boxes(texts, match=number_pattern)
+        return properties, values
 
     def find_confirm(self):
         button_box = self.box_of_screen(0.60, 0.65, 0.82, 0.82)
@@ -274,7 +322,7 @@ class EnhanceEchoTask(BaseWWTask, FindFeature):
         return True
 
     def find_add_mat(self):
-        return self.wait_ocr(0.09, 0.6, 0.38, 0.86, match=['阶段放入'], time_out=1)
+        return self.wait_ocr(0.09, 0.6, 0.38, 0.86, match=self.ui('add_mat'), time_out=1)
 
     def esc(self):
         start = time.time()
@@ -307,7 +355,7 @@ class EnhanceEchoTask(BaseWWTask, FindFeature):
         self.screenshot_echo(f'failed/{self.info_get("失败声骸数量")}_{safe_reason}')
         self.esc()
         self.log_info('不符合条件 丢弃')
-        self.wait_ocr(0.82, 0.86, 0.97, 0.96, match='培养', settle_time=0.1)
+        self.wait_ocr(0.82, 0.86, 0.97, 0.96, match=self.ui('enhance'), settle_time=0.1)
 
     def screenshot_echo(self, name):
         echo = self.box_of_screen(0.09, 0.09, 0.37, 0.55).crop_frame(self.frame)
@@ -340,7 +388,7 @@ class EnhanceEchoTask(BaseWWTask, FindFeature):
             self.log_info('符合条件的声骸，已暂停任务', notify=True)
             self.pause()
         self.esc()
-        self.wait_ocr(0.82, 0.86, 0.97, 0.96, match='培养', settle_time=0.1)
+        self.wait_ocr(0.82, 0.86, 0.97, 0.96, match=self.ui('enhance'), settle_time=0.1)
 
 
 def parse_number(text):

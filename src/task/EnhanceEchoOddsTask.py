@@ -41,10 +41,12 @@ class EnhanceEchoOddsTask(EnhanceEchoTask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.name = "⬆️ Enhance Echoes by Odds (game language: Chinese)"
-        self.description = ("Batch enhance that keeps or discards each echo by its odds of reaching the top-5% bar "
-                            "for the chosen character, versus a fresh echo. Open the bag (B), filter the echoes for "
-                            "that character, sort by level from +0, then start. Game and ok-ww must be in Chinese.")
+        self.name = "⬆️ Enhance Echoes by Odds"
+        self.description = ("Upgrades echoes +5 at a time and keeps or discards each one by its odds of reaching the "
+                            "top-5% bar for the chosen character, versus a fresh echo. In the Bag (B), open Echoes, "
+                            "filter to that character's echoes, sort by level with +0 first, select the first echo, "
+                            "then start. Game in English or Chinese.")
+        self.supported_languages = []
         for key in RULE_KEYS:
             self.default_config.pop(key, None)
             self.config_description.pop(key, None)
