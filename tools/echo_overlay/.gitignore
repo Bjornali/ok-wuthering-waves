@@ -2,3 +2,5 @@
 snapshots/
 overlay_settings.json
 __pycache__/
+!run_overlay.bat
+cache/
