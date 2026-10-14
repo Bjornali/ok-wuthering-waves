@@ -515,6 +515,11 @@ class Overlay:
                        bg=COLORS['bg'], fg=COLORS['muted'], selectcolor=COLORS['panel'],
                        activebackground=COLORS['bg'], font=('Segoe UI', 8)).pack(side='left', padx=6)
 
+        self.note = tk.Label(body, text='', bg=COLORS['bg'], fg=COLORS['muted'], font=('Segoe UI', 8),
+                             anchor='w', justify='left', wraplength=300)
+        self.note.pack(fill='x', pady=(4, 0))
+        self.show_note()
+
         self.verdict = tk.Label(body, text='Waiting for the game', bg=COLORS['bg'], fg=COLORS['neutral'],
                                 font=('Segoe UI', 15, 'bold'), anchor='w')
         self.verdict.pack(fill='x', pady=(8, 0))
@@ -554,7 +559,13 @@ class Overlay:
 
     def character_changed(self):
         self.persist()
+        self.show_note()
         self.last_subs = None
+
+    def show_note(self):
+        c = self.roster.get(self.character.get(), {})
+        tag = '' if c.get('reviewed') else '  [from build guide]'
+        self.note.config(text=(c.get('note') or '') + tag)
 
     # results
     def odds(self, name):

@@ -29,6 +29,17 @@ could finish and compares its odds of clearing the bar with a fresh echo's 5%:
 1.5x or better is KEEP GOING, 0.67x or worse is STOP, in between is TOSS-UP.
 Roll values and their odds come from Kuro Games' published probability disclosure.
 
-Edit `roster.json` to change a character's weights or add a character (same fields as the others).
+## Characters
+
+`roster.json` covers all 60 playable Resonators as of 3.7, including the four Rover forms and Suoming
+(3.7 phase 2, pre-release guide). Six have hand-reviewed weights (Calcharo, Hiyuki, Mortefi,
+Shorekeeper, Verina, Yinlin). The rest come from each character's substat priority in the
+wuwabuild.com / prydwen.gg build guides (`builds_source.json`), turned into weights by
+`make_roster.py`; the rules are at the top of that file. The overlay shows each character's
+priority line under the drop-down.
+
+To change a character, edit their line in `builds_source.json` and run `python make_roster.py`,
+or edit their weights in `roster.json` directly. Rover shows up in the bag under your own name,
+so pick the Rover form by hand.
 Set `"scoring": "range"` in `overlay_settings.json` to use the Echo Diagnostics page's scoring,
 where a minimum roll counts as zero.
