@@ -1,0 +1,4 @@
+numpy
+opencv-python
+onnxocr-ppocrv5[onnx]>=0.0.20
+mss
