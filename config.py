@@ -269,6 +269,7 @@ config = {
         ["src.task.MultiAccountDailyTask", "MultiAccountDailyTask"],
         ["src.task.MergeEchoTask", "MergeEchoTask"],
         ["src.task.EnhanceEchoTask", "EnhanceEchoTask"],
+        ["src.task.EnhanceEchoOddsTask", "EnhanceEchoOddsTask"],
         ["src.task.ChangeEchoTask", "ChangeEchoTask"],
         ["src.task.GardenTask", "GardenTask"],
         ["src.task.FarmRockTask", "FarmRockTask"],
